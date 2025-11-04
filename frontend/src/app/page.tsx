@@ -1,27 +1,20 @@
+'use client';
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+
 export default function Home() {
+  const router = useRouter();
+  
+  useEffect(() => {
+    // Redirect to signin immediately
+    router.push('/signin');
+  }, [router]);
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-24">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">CrossIt</h1>
-        <p className="text-xl text-muted-foreground mb-8">
-          E-commerce Cross-Listing Platform
-        </p>
-        <div className="flex gap-4 justify-center">
-          <a
-            href="/login"
-            className="px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition"
-          >
-            Login
-          </a>
-          <a
-            href="/register"
-            className="px-6 py-3 bg-secondary text-secondary-foreground rounded-lg hover:opacity-90 transition"
-          >
-            Register
-          </a>
-        </div>
-      </div>
-    </main>
+    <div className="flex min-h-screen items-center justify-center">
+      <div className="animate-pulse text-gray-400">Loading...</div>
+    </div>
   );
 }
 

@@ -1,158 +1,341 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { apiClient } from '@/lib/api-client';
-
-const MARKETPLACE_INFO: Record<string, { logo: string; color: string }> = {
-  amazon: { logo: '🔶', color: 'bg-orange-100 text-orange-800' },
-  ebay: { logo: '🔴', color: 'bg-red-100 text-red-800' },
-  etsy: { logo: '🟠', color: 'bg-amber-100 text-amber-800' },
-  bol: { logo: '🔵', color: 'bg-blue-100 text-blue-800' },
-  allegro: { logo: '🟣', color: 'bg-purple-100 text-purple-800' },
-  kaufland: { logo: '🔴', color: 'bg-red-100 text-red-800' },
-  onbuy: { logo: '🟢', color: 'bg-green-100 text-green-800' },
-  wish: { logo: '💙', color: 'bg-sky-100 text-sky-800' },
-  joom: { logo: '🟣', color: 'bg-violet-100 text-violet-800' },
-  zalando: { logo: '🟠', color: 'bg-orange-100 text-orange-800' },
-  aboutyou: { logo: '⚫', color: 'bg-gray-100 text-gray-800' },
-  otto: { logo: '🔴', color: 'bg-red-100 text-red-800' },
-  cdiscount: { logo: '🔵', color: 'bg-blue-100 text-blue-800' },
-  fnac_darty: { logo: '🟡', color: 'bg-yellow-100 text-yellow-800' },
-  vinted: { logo: '💚', color: 'bg-teal-100 text-teal-800' },
-  stockx: { logo: '⚫', color: 'bg-black text-white' },
-  shopify: { logo: '🟢', color: 'bg-green-100 text-green-800' },
-  la_redoute: { logo: '🔴', color: 'bg-red-100 text-red-800' },
-  galeries_lafayette: { logo: '🔵', color: 'bg-blue-100 text-blue-800' },
-  asos: { logo: '⚫', color: 'bg-gray-900 text-white' },
-};
+import { useState } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { MarketplaceIcon } from '@/components/marketplace-icons';
+import { 
+  Store, 
+  Search, 
+  CheckCircle2, 
+  Circle,
+  Sparkles,
+  TrendingUp,
+  Users,
+  Globe
+} from 'lucide-react';
 
 export default function MarketplacesPage() {
-  const [marketplaces, setMarketplaces] = useState<any[]>([]);
-  const [connectedMarketplaces, setConnectedMarketplaces] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(true);
-  const [connecting, setConnecting] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    fetchMarketplaces();
-  }, []);
+  // Mock data - les 20 marketplaces
+  const marketplaces = [
+    {
+      id: 'amazon',
+      name: 'Amazon',
+      description: 'World\'s largest online marketplace',
+      connected: true,
+      region: 'Global',
+      listings: 234,
+      color: 'from-orange-500/20 to-yellow-500/20',
+      borderColor: 'border-orange-500/30',
+    },
+    {
+      id: 'ebay',
+      name: 'eBay',
+      description: 'Leading online auction platform',
+      connected: true,
+      region: 'Global',
+      listings: 189,
+      color: 'from-blue-500/20 to-purple-500/20',
+      borderColor: 'border-blue-500/30',
+    },
+    {
+      id: 'etsy',
+      name: 'Etsy',
+      description: 'Marketplace for unique & creative goods',
+      connected: true,
+      region: 'Global',
+      listings: 156,
+      color: 'from-orange-400/20 to-pink-500/20',
+      borderColor: 'border-orange-400/30',
+    },
+    {
+      id: 'bol',
+      name: 'bol.com',
+      description: 'Leading e-commerce platform in Netherlands',
+      connected: false,
+      region: 'Netherlands',
+      listings: 0,
+      color: 'from-blue-600/20 to-cyan-500/20',
+      borderColor: 'border-blue-600/30',
+    },
+    {
+      id: 'allegro',
+      name: 'Allegro',
+      description: 'Poland\'s largest online marketplace',
+      connected: false,
+      region: 'Poland',
+      listings: 0,
+      color: 'from-orange-500/20 to-red-500/20',
+      borderColor: 'border-orange-500/30',
+    },
+    {
+      id: 'kaufland',
+      name: 'Kaufland',
+      description: 'Major European marketplace',
+      connected: false,
+      region: 'Europe',
+      listings: 0,
+      color: 'from-red-600/20 to-blue-600/20',
+      borderColor: 'border-red-600/30',
+    },
+    {
+      id: 'onbuy',
+      name: 'OnBuy',
+      description: 'Fast-growing UK marketplace',
+      connected: false,
+      region: 'UK',
+      listings: 0,
+      color: 'from-purple-500/20 to-pink-500/20',
+      borderColor: 'border-purple-500/30',
+    },
+    {
+      id: 'wish',
+      name: 'Wish',
+      description: 'Mobile-first shopping platform',
+      connected: false,
+      region: 'Global',
+      listings: 0,
+      color: 'from-blue-400/20 to-cyan-400/20',
+      borderColor: 'border-blue-400/30',
+    },
+    {
+      id: 'joom',
+      name: 'Joom',
+      description: 'International e-commerce platform',
+      connected: false,
+      region: 'Global',
+      listings: 0,
+      color: 'from-teal-500/20 to-green-500/20',
+      borderColor: 'border-teal-500/30',
+    },
+    {
+      id: 'zalando',
+      name: 'Zalando',
+      description: 'Europe\'s leading fashion platform',
+      connected: false,
+      region: 'Europe',
+      listings: 0,
+      color: 'from-orange-600/20 to-amber-500/20',
+      borderColor: 'border-orange-600/30',
+    },
+    {
+      id: 'aboutyou',
+      name: 'ABOUT YOU',
+      description: 'European fashion & lifestyle marketplace',
+      connected: false,
+      region: 'Europe',
+      listings: 0,
+      color: 'from-pink-500/20 to-rose-500/20',
+      borderColor: 'border-pink-500/30',
+    },
+    {
+      id: 'otto',
+      name: 'OTTO Market',
+      description: 'Germany\'s largest online marketplace',
+      connected: false,
+      region: 'Germany',
+      listings: 0,
+      color: 'from-red-600/20 to-yellow-500/20',
+      borderColor: 'border-red-600/30',
+    },
+    {
+      id: 'cdiscount',
+      name: 'Cdiscount',
+      description: 'Leading French e-commerce site',
+      connected: false,
+      region: 'France',
+      listings: 0,
+      color: 'from-blue-600/20 to-red-500/20',
+      borderColor: 'border-blue-600/30',
+    },
+    {
+      id: 'fnac',
+      name: 'Fnac Darty',
+      description: 'French marketplace for tech & culture',
+      connected: false,
+      region: 'France',
+      listings: 0,
+      color: 'from-amber-600/20 to-orange-600/20',
+      borderColor: 'border-amber-600/30',
+    },
+    {
+      id: 'vinted',
+      name: 'Vinted Pro',
+      description: 'Second-hand fashion marketplace',
+      connected: false,
+      region: 'Europe',
+      listings: 0,
+      color: 'from-teal-600/20 to-cyan-500/20',
+      borderColor: 'border-teal-600/30',
+    },
+    {
+      id: 'stockx',
+      name: 'StockX',
+      description: 'Marketplace for sneakers & streetwear',
+      connected: false,
+      region: 'Global',
+      listings: 0,
+      color: 'from-green-600/20 to-emerald-500/20',
+      borderColor: 'border-green-600/30',
+    },
+    {
+      id: 'shopify',
+      name: 'Shopify',
+      description: 'E-commerce platform for online stores',
+      connected: false,
+      region: 'Global',
+      listings: 0,
+      color: 'from-green-500/20 to-teal-500/20',
+      borderColor: 'border-green-500/30',
+    },
+    {
+      id: 'laredoute',
+      name: 'La Redoute',
+      description: 'French fashion & home marketplace',
+      connected: false,
+      region: 'France',
+      listings: 0,
+      color: 'from-red-500/20 to-pink-500/20',
+      borderColor: 'border-red-500/30',
+    },
+    {
+      id: 'galerieslafayette',
+      name: 'Galeries Lafayette',
+      description: 'Premium French department store',
+      connected: false,
+      region: 'France',
+      listings: 0,
+      color: 'from-purple-600/20 to-fuchsia-500/20',
+      borderColor: 'border-purple-600/30',
+    },
+    {
+      id: 'asos',
+      name: 'ASOS',
+      description: 'Global fashion destination',
+      connected: false,
+      region: 'Global',
+      listings: 0,
+      color: 'from-slate-600/20 to-gray-500/20',
+      borderColor: 'border-slate-600/30',
+    },
+  ];
 
-  const fetchMarketplaces = async () => {
-    try {
-      const [allMarketplaces, connected] = await Promise.all([
-        apiClient.getMarketplaces(),
-        apiClient.getConnectedMarketplaces(),
-      ]);
+  const filteredMarketplaces = marketplaces.filter(mp =>
+    mp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    mp.description.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-      setMarketplaces(allMarketplaces.marketplaces || []);
-      setConnectedMarketplaces(
-        new Set(connected.connected_marketplaces?.map((m: any) => m.name) || [])
-      );
-    } catch (error) {
-      console.error('Failed to fetch marketplaces:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleConnect = async (marketplaceName: string) => {
-    setConnecting(marketplaceName);
-    try {
-      const result = await apiClient.connectMarketplace(marketplaceName);
-      
-      if (result.auth_url) {
-        // Open OAuth URL in new window
-        window.open(result.auth_url, '_blank', 'width=600,height=700');
-        // TODO: Implement OAuth callback handling
-        alert('OAuth flow initiated. Complete the authentication in the popup window.');
-      } else {
-        alert('Marketplace connection initiated. Check marketplace documentation for setup.');
-      }
-      
-      // Refresh marketplace list
-      await fetchMarketplaces();
-    } catch (error: any) {
-      alert(error.response?.data?.detail || 'Failed to connect marketplace');
-    } finally {
-      setConnecting(null);
-    }
-  };
-
-  const handleDisconnect = async (marketplaceName: string) => {
-    if (!confirm(`Are you sure you want to disconnect from ${marketplaceName}?`)) {
-      return;
-    }
-
-    try {
-      await apiClient.disconnectMarketplace(marketplaceName);
-      await fetchMarketplaces();
-    } catch (error: any) {
-      alert(error.response?.data?.detail || 'Failed to disconnect marketplace');
-    }
-  };
-
-  if (loading) {
-    return <div className="p-6">Loading...</div>;
-  }
+  const connectedCount = marketplaces.filter(mp => mp.connected).length;
+  const totalListings = marketplaces.reduce((sum, mp) => sum + mp.listings, 0);
 
   return (
-    <div className="px-4 py-6 sm:px-0">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Marketplaces</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          Connect to marketplaces to start cross-listing your products
+    <div className="space-y-8">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold text-darktext mb-2 flex items-center gap-3">
+          <Store className="w-8 h-8 text-warmgold" />
+          Marketplaces
+        </h1>
+        <p className="text-darktext/60">
+          Connect and manage your cross-listing channels
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {marketplaces.map((marketplace) => {
-          const isConnected = connectedMarketplaces.has(marketplace.name);
-          const info = MARKETPLACE_INFO[marketplace.name] || { logo: '🏪', color: 'bg-gray-100 text-gray-800' };
 
-          return (
-            <div
-              key={marketplace.name}
-              className="bg-white overflow-hidden shadow rounded-lg border border-gray-200 hover:shadow-md transition-shadow"
-            >
-              <div className="p-5">
-                <div className="flex items-center mb-3">
-                  <div className={`text-3xl mr-3 ${info.color} p-2 rounded-lg`}>
-                    {info.logo}
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-medium text-gray-900">
-                      {marketplace.display_name}
-                    </h3>
-                    {isConnected && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                        Connected
-                      </span>
-                    )}
-                  </div>
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-darktext/40 w-5 h-5" />
+        <Input
+          placeholder="Search marketplaces..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10 bg-lightgray border-warmgold/20 text-darktext placeholder:text-darktext/40 focus:border-warmgold focus:ring-gold"
+        />
+      </div>
+
+      {/* Marketplaces Grid - Plus compact */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+        {filteredMarketplaces.map((marketplace) => (
+          <Card
+            key={marketplace.id}
+            className={`glass-effect ${marketplace.borderColor} shadow-premium hover:shadow-electric transition-all duration-300 hover:scale-105 group relative overflow-hidden`}
+          >
+            {/* Background gradient */}
+            <div className={`absolute inset-0 bg-gradient-to-br ${marketplace.color} opacity-50 group-hover:opacity-70 transition-opacity`}></div>
+            
+            {/* Content */}
+            <CardHeader className="relative">
+              <div className="flex items-start justify-between mb-3">
+                <div className="w-12 h-12 flex items-center justify-center">
+                  <MarketplaceIcon name={marketplace.id} className="w-10 h-10" />
                 </div>
-                <p className="text-sm text-gray-500 mb-4">{marketplace.description}</p>
-                
-                {isConnected ? (
-                  <button
-                    onClick={() => handleDisconnect(marketplace.name)}
-                    className="w-full inline-flex justify-center items-center px-4 py-2 border border-red-300 text-sm font-medium rounded-md text-red-700 bg-white hover:bg-red-50"
-                  >
-                    Disconnect
-                  </button>
+                {marketplace.connected ? (
+                  <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-warmgold/20 text-warmgold text-xs font-medium">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Connected
+                  </div>
                 ) : (
-                  <button
-                    onClick={() => handleConnect(marketplace.name)}
-                    disabled={connecting === marketplace.name}
-                    className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
-                  >
-                    {connecting === marketplace.name ? 'Connecting...' : 'Connect'}
-                  </button>
+                  <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-lightgray/50 text-darktext/60 text-xs font-medium">
+                    <Circle className="w-3 h-3" />
+                    Available
+                  </div>
                 )}
               </div>
-            </div>
-          );
-        })}
+              <CardTitle className="text-base text-darktext group-hover:text-warmgold transition-colors">
+                {marketplace.name}
+              </CardTitle>
+              <CardDescription className="text-darktext/60 text-xs line-clamp-2">
+                {marketplace.description}
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="relative space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-darktext/60">Region</span>
+                <span className="text-darktext font-medium">{marketplace.region}</span>
+              </div>
+              
+              {marketplace.connected && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-darktext/60">Listings</span>
+                  <span className="text-warmgold font-semibold">{marketplace.listings}</span>
+                </div>
+              )}
+
+              <Button
+                className={`w-full ${
+                  marketplace.connected
+                    ? 'bg-lightgray/50 hover:bg-lightgray text-darktext border border-warmgold/20'
+                    : 'bg-gradient-gold hover:opacity-90 text-carbon font-semibold'
+                }`}
+                size="sm"
+              >
+                {marketplace.connected ? (
+                  <>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Manage
+                  </>
+                ) : (
+                  <>
+                    <Store className="mr-2 h-4 w-4" />
+                    Connect
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
       </div>
+
+      {filteredMarketplaces.length === 0 && (
+        <div className="text-center py-12">
+          <Store className="w-16 h-16 text-darktext/40 mx-auto mb-4" />
+          <p className="text-darktext/60">No marketplaces found matching your search.</p>
+        </div>
+      )}
     </div>
   );
 }
-

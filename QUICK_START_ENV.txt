@@ -1,0 +1,39 @@
+# ==============================================
+# 🚀 QUICK START - .env minimal pour commencer
+# ==============================================
+# COPIE ce contenu dans: .env (à la racine du projet)
+
+# Application
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_API_URL=http://localhost:8000/api
+
+# Database
+POSTGRES_USER=crossit
+POSTGRES_PASSWORD=crossit
+POSTGRES_DB=crossit
+DATABASE_URL=postgresql://crossit:crossit@postgres:5432/crossit
+
+# Redis
+REDIS_URL=redis://redis:6379
+CELERY_BROKER_URL=redis://redis:6379/0
+CELERY_RESULT_BACKEND=redis://redis:6379/0
+
+# JWT Secret (change en production!)
+JWT_SECRET=dev-secret-please-change-in-production
+
+# OAuth (OPTIONNEL - laisse vide pour l'instant)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+MICROSOFT_CLIENT_ID=
+MICROSOFT_CLIENT_SECRET=
+
+# AWS S3 (OPTIONNEL - laisse vide pour l'instant)
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_S3_BUCKET=crossit-products
+AWS_REGION=us-east-1
+
+# Dev
+DEBUG=True
+LOG_LEVEL=INFO
+
