@@ -1,11 +1,7 @@
 from celery import shared_task
 from app.tasks.celery_app import celery_app
-from app.core.database import SessionLocal
-from app.models.listing import Listing
-from app.models.product import Product
-from app.models.marketplace_connection import MarketplaceConnection
-from app.models.webhook_event import WebhookEvent
 from app.integrations.connector_factory import ConnectorFactory
+from app.core.supabase import supabase_admin
 from datetime import datetime, timedelta
 import json
 

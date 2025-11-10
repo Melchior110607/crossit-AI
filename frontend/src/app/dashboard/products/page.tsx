@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { useProducts, useProductMutations } from '@/hooks/useProducts';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -58,98 +59,46 @@ export default function ProductsPage() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'draft'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [productToDelete, setProductToDelete] = useState<typeof products[0] | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<any>(null);
 
-  // Mock data - à remplacer par des vraies données de l'API
-  const products = [
-    {
-      id: '1',
-      name: 'Premium Wireless Headphones',
-      sku: 'WH-1000XM5',
-      price: 349.99,
-      stock: 45,
-      status: 'active',
-      marketplaces: 3,
-      sales: 127,
-      rating: 4.8,
-      category: 'Electronics',
-    },
-    {
-      id: '2',
-      name: 'Ergonomic Wireless Mouse',
-      sku: 'MX-MASTER-3',
-      price: 99.99,
-      stock: 78,
-      status: 'active',
-      marketplaces: 5,
-      sales: 243,
-      rating: 4.9,
-      category: 'Electronics',
-    },
-    {
-      id: '3',
-      name: 'Mechanical Keyboard RGB',
-      sku: 'KB-RGB-PRO',
-      price: 179.99,
-      stock: 23,
-      status: 'active',
-      marketplaces: 2,
-      sales: 89,
-      rating: 4.7,
-      category: 'Electronics',
-    },
-    {
-      id: '4',
-      name: 'USB-C Hub 7-in-1',
-      sku: 'HUB-7IN1',
-      price: 59.99,
-      stock: 156,
-      status: 'active',
-      marketplaces: 4,
-      sales: 312,
-      rating: 4.6,
-      category: 'Accessories',
-    },
-    {
-      id: '5',
-      name: 'Laptop Stand Adjustable',
-      sku: 'LS-ADJ-PRO',
-      price: 49.99,
-      stock: 0,
-      status: 'draft',
-      marketplaces: 0,
-      sales: 0,
-      rating: 0,
-      category: 'Accessories',
-    },
-    {
-      id: '6',
-      name: 'Webcam HD 1080p',
-      sku: 'WC-HD-1080',
-      price: 79.99,
-      stock: 64,
-      status: 'active',
-      marketplaces: 3,
-      sales: 156,
-      rating: 4.5,
-      category: 'Electronics',
-    },
-  ];
-
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = 
-      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      product.sku.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = filterStatus === 'all' || product.status === filterStatus;
-    return matchesSearch && matchesStatus;
+  // Fetch products from API
+  const { products, isLoading, error, refetch } = useProducts({
+    status: filterStatus === 'all' ? undefined : filterStatus,
+    search: searchQuery || undefined,
   });
 
-  const stats = {
+  // Product mutations (create, update, delete)
+  const { remove: removeProduct, isLoading: isMutating } = useProductMutations();
+
+  // Filter products client-side (for instant feedback)
+  const filteredProducts = useMemo(() => {
+    return products.filter(product => {
+      const matchesSearch = 
+        product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        product.sku.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesStatus = filterStatus === 'all' || product.status === filterStatus;
+      return matchesSearch && matchesStatus;
+    });
+  }, [products, searchQuery, filterStatus]);
+
+  // Calculate stats
+  const stats = useMemo(() => ({
     total: products.length,
     active: products.filter(p => p.status === 'active').length,
     draft: products.filter(p => p.status === 'draft').length,
-    totalValue: products.reduce((sum, p) => sum + (p.price * p.stock), 0),
+    totalValue: products.reduce((sum, p) => sum + (p.base_price * p.total_stock), 0),
+  }), [products]);
+
+  // Handle product deletion
+  const handleDelete = async () => {
+    if (!productToDelete) return;
+    
+    const success = await removeProduct(productToDelete.id);
+    if (success) {
+      setDeleteDialogOpen(false);
+      setProductToDelete(null);
+      refetch(); // Refresh products list
+    }
   };
 
   // Skeleton Loader Component - Plus compact
@@ -312,14 +261,14 @@ export default function ProductsPage() {
                     </div>
                   </TableCell>
                   <TableCell className="font-mono text-xs text-darktext/70">{product.sku}</TableCell>
-                  <TableCell className="font-semibold text-warmgold">${product.price}</TableCell>
+                  <TableCell className="font-semibold text-warmgold">${product.base_price.toFixed(2)}</TableCell>
                   <TableCell>
                     <span className={`text-sm ${
-                      product.stock === 0 ? 'text-destructive' :
-                      product.stock < 30 ? 'text-skyblue' :
+                      product.available_stock === 0 ? 'text-destructive' :
+                      product.available_stock < 30 ? 'text-skyblue' :
                       'text-darktext/70'
                     }`}>
-                      {product.stock === 0 ? 'Out of stock' : `${product.stock} units`}
+                      {product.available_stock === 0 ? 'Out of stock' : `${product.available_stock} units`}
                     </span>
                   </TableCell>
                   <TableCell>
@@ -328,7 +277,7 @@ export default function ProductsPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{product.marketplaces} platforms</Badge>
+                    <Badge variant="outline">0 platforms</Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
@@ -391,10 +340,10 @@ export default function ProductsPage() {
               </div>
 
               {/* Rating */}
-              {product.rating > 0 && (
+              {product.average_rating && product.average_rating > 0 && (
                 <div className="absolute top-3 left-3 flex items-center gap-1 px-2 py-1 rounded-lg bg-carbon/80 backdrop-blur">
                   <Star className="w-3 h-3 text-warmgold fill-gold" />
-                  <span className="text-xs font-semibold text-darktext">{product.rating}</span>
+                  <span className="text-xs font-semibold text-darktext">{product.average_rating.toFixed(1)}</span>
                 </div>
               )}
             </div>
@@ -414,20 +363,20 @@ export default function ProductsPage() {
               {/* Price & Stock - Plus compact */}
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <p className="text-xl font-bold text-warmgold">${product.price}</p>
+                  <p className="text-xl font-bold text-warmgold">${product.base_price.toFixed(2)}</p>
                   <p className={`text-xs ${
-                    product.stock === 0 ? 'text-destructive' :
-                    product.stock < 30 ? 'text-skyblue' :
+                    product.available_stock === 0 ? 'text-destructive' :
+                    product.available_stock < 30 ? 'text-skyblue' :
                     'text-darktext/60'
                   }`}>
-                    {product.stock === 0 ? 'Out of stock' : `${product.stock} in stock`}
+                    {product.available_stock === 0 ? 'Out of stock' : `${product.available_stock} in stock`}
                   </p>
                 </div>
-                {product.sales > 0 && (
+                {product.total_sales > 0 && (
                   <div className="text-right">
                     <div className="flex items-center gap-1 text-skyblue">
                       <TrendingUp className="w-4 h-4" />
-                      <span className="text-xs font-semibold">{product.sales}</span>
+                      <span className="text-xs font-semibold">{product.total_sales}</span>
                     </div>
                     <p className="text-xs text-darktext/50">sales</p>
                   </div>
@@ -437,7 +386,7 @@ export default function ProductsPage() {
               {/* Marketplaces */}
               <div className="flex items-center justify-between mb-3 pb-3 border-b border-warmgold/10">
                 <span className="text-xs text-darktext/60">Listed on</span>
-                <Badge variant="gold">{product.marketplaces} marketplaces</Badge>
+                <Badge variant="gold">0 marketplaces</Badge>
               </div>
 
               {/* Actions - Dropdown Menu */}
@@ -527,12 +476,8 @@ export default function ProductsPage() {
             </Button>
             <Button 
               variant="destructive"
-              onClick={() => {
-                // TODO: Call delete API
-                console.log('Deleting product:', productToDelete?.id);
-                setDeleteDialogOpen(false);
-                setProductToDelete(null);
-              }}
+              onClick={handleDelete}
+              disabled={isMutating}
             >
               <Trash2 className="mr-2 h-4 w-4" />
               Delete Product

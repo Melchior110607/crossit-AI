@@ -2,6 +2,7 @@ from typing import Dict, List, Any
 from app.integrations.base_connector import BaseMarketplaceConnector
 import hmac
 import hashlib
+import base64
 
 
 class ShopifyConnector(BaseMarketplaceConnector):
@@ -62,6 +63,8 @@ class ShopifyConnector(BaseMarketplaceConnector):
                 "images": [{"src": img} for img in product_data.get("images", [])]
             }
         }
+
+    
         
         response = self._make_request("POST", f"{self.BASE_URL}/products.json", headers=headers, json_data=product)
         result = response.json().get("product", {})
@@ -112,4 +115,72 @@ class ShopifyConnector(BaseMarketplaceConnector):
     def verify_webhook_signature(self, payload: bytes, signature: str, secret: str) -> bool:
         computed_hmac = base64.b64encode(hmac.new(secret.encode(), payload, hashlib.sha256).digest()).decode()
         return hmac.compare_digest(computed_hmac, signature)
+    
+    def get_inventory(self, access_token: str, **filters) -> List[Dict]:
+        """Get Shopify inventory levels across all locations"""
+        headers = {"X-Shopify-Access-Token": access_token}
+        
+        # First get all inventory items
+        response = self._make_request("GET", f"{self.BASE_URL}/inventory_items.json", headers=headers)
+        inventory_items = response.json().get("inventory_items", [])
+        
+        # Get inventory levels for each item
+        inventory_data = []
+        for item in inventory_items:
+            item_id = item.get("id")
+            levels_response = self._make_request(
+                "GET", 
+                f"{self.BASE_URL}/inventory_levels.json?inventory_item_ids={item_id}", 
+                headers=headers
+            )
+            levels = levels_response.json().get("inventory_levels", [])
+            
+            inventory_data.append({
+                "inventory_item_id": item_id,
+                "sku": item.get("sku"),
+                "levels": levels
+            })
+        
+        return inventory_data
+    
+    def update_inventory(self, inventory_item_id: str, quantity: int, access_token: str, location_id: str = None) -> Dict[str, Any]:
+        """Update Shopify inventory quantity"""
+        headers = {"X-Shopify-Access-Token": access_token, "Content-Type": "application/json"}
+        
+        # If no location specified, get the first location
+        if not location_id:
+            locations_response = self._make_request("GET", f"{self.BASE_URL}/locations.json", headers=headers)
+            locations = locations_response.json().get("locations", [])
+            if locations:
+                location_id = locations[0].get("id")
+        
+        # Set inventory level
+        inventory_data = {
+            "location_id": location_id,
+            "inventory_item_id": inventory_item_id,
+            "available": quantity
+        }
+        
+        response = self._make_request(
+            "POST", 
+            f"{self.BASE_URL}/inventory_levels/set.json", 
+            headers=headers, 
+            json_data=inventory_data
+        )
+        
+        return response.json()
+    
+    def get_orders(self, access_token: str, **filters) -> List[Dict]:
+        """Get Shopify orders"""
+        headers = {"X-Shopify-Access-Token": access_token}
+        
+        params = {
+            "status": filters.get("status", "any"),
+            "limit": filters.get("limit", 50),
+            "created_at_min": filters.get("created_after")
+        }
+        
+        response = self._make_request("GET", f"{self.BASE_URL}/orders.json", headers=headers, params=params)
+        return response.json().get("orders", [])
+
 

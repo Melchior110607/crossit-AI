@@ -1,21 +1,6 @@
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: crossit-postgres
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-crossit}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crossit}
-      POSTGRES_DB: ${POSTGRES_DB:-crossit}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crossit}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
+  # PostgreSQL removed - using Supabase instead! 🚀
+  
   redis:
     image: redis:7-alpine
     container_name: crossit-redis
@@ -35,15 +20,59 @@ services:
       dockerfile: Dockerfile
     container_name: crossit-backend
     environment:
-      - DATABASE_URL=${DATABASE_URL:-postgresql://crossit:crossit@postgres:5432/crossit}
+      # Supabase (replaces PostgreSQL)
+      - SUPABASE_URL=${SUPABASE_URL:-https://vtisiosocwfnelxumnji.supabase.co}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      
+      # Better Auth (SQLite - kept separate)
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./auth.db}
+      
+      # Redis for Celery
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
       - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      
+      # JWT Secret
       - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
-      - AWS_S3_BUCKET=${AWS_S3_BUCKET:-crossit-products}
-      - AWS_REGION=${AWS_REGION:-us-east-1}
+      
+      # Marketplace OAuth - StockX
+      - STOCKX_CLIENT_ID=${STOCKX_CLIENT_ID}
+      - STOCKX_CLIENT_SECRET=${STOCKX_CLIENT_SECRET}
+      - STOCKX_REDIRECT_URI=${STOCKX_REDIRECT_URI}
+      
+      # Marketplace OAuth - eBay
+      - EBAY_APP_ID=${EBAY_APP_ID}
+      - EBAY_CERT_ID=${EBAY_CERT_ID}
+      - EBAY_DEV_ID=${EBAY_DEV_ID}
+      - EBAY_REDIRECT_URI=${EBAY_REDIRECT_URI}
+      - EBAY_ENVIRONMENT=${EBAY_ENVIRONMENT:-SANDBOX}
+      - EBAY_RU_NAME=${EBAY_RU_NAME}
+      
+      # Marketplace OAuth - Shopify
+      - SHOPIFY_API_KEY=${SHOPIFY_API_KEY}
+      - SHOPIFY_API_SECRET=${SHOPIFY_API_SECRET}
+      - SHOPIFY_REDIRECT_URI=${SHOPIFY_REDIRECT_URI}
+      
+      # Marketplace API Keys - Kaufland
+      - KAUFLAND_CLIENT_KEY=${KAUFLAND_CLIENT_KEY}
+      - KAUFLAND_SECRET_KEY=${KAUFLAND_SECRET_KEY}
+      
+      # Marketplace OAuth - Etsy
+      - ETSY_KEYSTRING=${ETSY_KEYSTRING}
+      - ETSY_SHARED_SECRET=${ETSY_SHARED_SECRET}
+      
+      # OpenAI API (for AI Product Automation)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_VISION_MODEL=${OPENAI_VISION_MODEL:-gpt-4o}
+      - OPENAI_TEXT_MODEL=${OPENAI_TEXT_MODEL:-gpt-4o}
+      
+      # eBay Finding API (optional - for price research)
+      - EBAY_FINDING_APP_ID=${EBAY_FINDING_APP_ID}
+      
+      - BASE_REDIRECT_URL=${BASE_REDIRECT_URL}
+      
+      # Other configs
       - DEBUG=${DEBUG:-True}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:
@@ -51,8 +80,6 @@ services:
     volumes:
       - ./backend:/app
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -63,18 +90,18 @@ services:
       dockerfile: Dockerfile
     container_name: crossit-celery-worker
     environment:
-      - DATABASE_URL=${DATABASE_URL:-postgresql://crossit:crossit@postgres:5432/crossit}
+      # Supabase
+      - SUPABASE_URL=${SUPABASE_URL:-https://vtisiosocwfnelxumnji.supabase.co}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      
+      # Redis
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
       - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
-      - AWS_S3_BUCKET=${AWS_S3_BUCKET:-crossit-products}
-      - AWS_REGION=${AWS_REGION:-us-east-1}
     volumes:
       - ./backend:/app
     depends_on:
-      - postgres
       - redis
       - backend
     command: celery -A app.tasks.celery_app worker --loglevel=info
@@ -85,14 +112,18 @@ services:
       dockerfile: Dockerfile
     container_name: crossit-celery-beat
     environment:
-      - DATABASE_URL=${DATABASE_URL:-postgresql://crossit:crossit@postgres:5432/crossit}
+      # Supabase
+      - SUPABASE_URL=${SUPABASE_URL:-https://vtisiosocwfnelxumnji.supabase.co}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      
+      # Redis
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
       - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
     volumes:
       - ./backend:/app
     depends_on:
-      - postgres
       - redis
       - backend
     command: celery -A app.tasks.celery_app beat --loglevel=info
@@ -103,14 +134,19 @@ services:
       dockerfile: Dockerfile
     container_name: crossit-frontend
     environment:
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000/api}
+      # Supabase
+      - NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL:-https://vtisiosocwfnelxumnji.supabase.co}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_KEY}
+      
+      # Backend API (SANS /api à la fin car le code ajoute déjà /api/...)
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://backend:8000}
       - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
-      - DATABASE_URL=${DATABASE_URL:-postgresql://crossit:crossit@postgres:5432/crossit}
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
-      - MICROSOFT_CLIENT_ID=${MICROSOFT_CLIENT_ID:-}
-      - MICROSOFT_CLIENT_SECRET=${MICROSOFT_CLIENT_SECRET:-}
-      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
+      
+      # Better Auth OAuth (Google & Microsoft)
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - MICROSOFT_CLIENT_ID=${MICROSOFT_CLIENT_ID}
+      - MICROSOFT_CLIENT_SECRET=${MICROSOFT_CLIENT_SECRET}
     ports:
       - "3000:3000"
     volumes:
@@ -119,10 +155,8 @@ services:
       - /app/.next
     depends_on:
       - backend
-      - postgres
     command: npm run dev
 
 volumes:
-  postgres_data:
   redis_data:
 

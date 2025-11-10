@@ -7,9 +7,11 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "CrossIt - E-commerce Cross-Listing Platform"
     
     # Database
+    # Docker: Uses PostgreSQL (set via docker-compose.yml)
+    # Local: Uses SQLite by default (can override with .env)
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
-        "postgresql://crossit:crossit@postgres:5432/crossit"
+        "sqlite:///./crossit.db"  # Default for local development
     )
     
     # Redis
@@ -24,8 +26,12 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
-        "http://frontend:3000"
+        "http://frontend:3000",
+        "https://joanna-edgier-emil.ngrok-free.dev"
     ]
+    
+    # Base URL for OAuth redirects (can be ngrok URL)
+    BASE_REDIRECT_URL: str = os.getenv("BASE_REDIRECT_URL", "http://localhost:3000")
     
     # AWS S3
     AWS_ACCESS_KEY_ID: str = os.getenv("AWS_ACCESS_KEY_ID", "")

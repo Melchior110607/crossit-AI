@@ -1,252 +1,279 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { Stepper, Step } from '@/components/ui/stepper';
+import { ImageUploadCard } from '@/components/product/image-upload-card';
+import { AnalysisProgress } from '@/components/product/analysis-progress';
+import { ListingReviewCard } from '@/components/product/listing-review-card';
+import { PublishSuccessCard } from '@/components/product/publish-success-card';
 import { apiClient } from '@/lib/api-client';
+import { Button } from '@/components/ui/button';
+import { ArrowLeft, AlertCircle } from 'lucide-react';
 
-export default function NewProductPage() {
+type WorkflowStep = 'upload' | 'analyzing' | 'research' | 'generate' | 'review' | 'publish' | 'success';
+
+export default function SmartProductCreation() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    price: '',
-    category: '',
-    brand: '',
-    sku: '',
-    quantity: '1',
-    condition: 'new',
-  });
-  const [images, setImages] = useState<string[]>([]);
-  const [uploadingImages, setUploadingImages] = useState(false);
+  
+  // Workflow state
+  const [currentStep, setCurrentStep] = useState<WorkflowStep>('upload');
+  const [progress, setProgress] = useState(0);
+  
+  // Data state
+  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+  const [analysisId, setAnalysisId] = useState<string>('');
+  const [analysisData, setAnalysisData] = useState<any>(null);
+  const [priceData, setPriceData] = useState<any>(null);
+  const [recommendations, setRecommendations] = useState<any>(null);
+  const [listings, setListings] = useState<Record<string, any>>({});
+  const [publishResult, setPublishResult] = useState<any>(null);
+  
+  // Error state
+  const [error, setError] = useState<string | null>(null);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
+  // Stepper configuration
+  const steps: Step[] = [
+    {
+      id: 'upload',
+      label: 'Upload',
+      description: 'Add photos',
+      status: currentStep === 'upload' ? 'in-progress' : 
+              ['analyzing', 'research', 'generate', 'review', 'publish', 'success'].includes(currentStep) ? 'completed' : 'pending'
+    },
+    {
+      id: 'analyzing',
+      label: 'Analyze',
+      description: 'AI analysis',
+      status: currentStep === 'analyzing' ? 'in-progress' : 
+              ['research', 'generate', 'review', 'publish', 'success'].includes(currentStep) ? 'completed' : 'pending'
+    },
+    {
+      id: 'research',
+      label: 'Research',
+      description: 'Find prices',
+      status: currentStep === 'research' ? 'in-progress' : 
+              ['generate', 'review', 'publish', 'success'].includes(currentStep) ? 'completed' : 'pending'
+    },
+    {
+      id: 'generate',
+      label: 'Generate',
+      description: 'Create listings',
+      status: currentStep === 'generate' ? 'in-progress' : 
+              ['review', 'publish', 'success'].includes(currentStep) ? 'completed' : 'pending'
+    },
+    {
+      id: 'review',
+      label: 'Review',
+      description: 'Approve & publish',
+      status: currentStep === 'review' ? 'in-progress' : 
+              ['publish', 'success'].includes(currentStep) ? 'completed' : 'pending'
+    },
+  ];
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-
-    setUploadingImages(true);
+  const handleImageUpload = useCallback(async (files: File[]) => {
     try {
-      const result = await apiClient.uploadImages(files);
-      setImages([...images, ...result.uploaded_images]);
-    } catch (error: any) {
-      alert(error.response?.data?.detail || 'Failed to upload images');
-    } finally {
-      setUploadingImages(false);
+      setError(null);
+      setCurrentStep('analyzing');
+      setProgress(10);
+
+      // Upload images to S3/Supabase Storage
+      const uploadResult = await apiClient.uploadImages(files);
+      const imageUrls = uploadResult.uploaded_images;
+      setUploadedImages(imageUrls);
+      setProgress(15);
+
+      // Step 1: Analyze product images
+      const analysis = await apiClient.analyzeProduct(imageUrls);
+      setAnalysisId(analysis.analysis_id);
+      setAnalysisData(analysis.product_info);
+      setProgress(25);
+
+      // Check for missing info
+      if (analysis.missing_info && analysis.missing_info.length > 0) {
+        // TODO: Show dialog to collect missing information
+        console.warn('Missing information:', analysis.missing_info);
+      }
+
+      // Move to price research
+      setCurrentStep('research');
+      setProgress(30);
+
+      // Step 2: Research prices
+      const prices = await apiClient.researchPrices(analysis.analysis_id, analysis.product_info);
+      setPriceData(prices);
+      setRecommendations(prices.marketplace_recommendations);
+      setProgress(50);
+
+      // Move to content generation
+      setCurrentStep('generate');
+      setProgress(55);
+
+      // Step 3: Generate listings for recommended marketplaces
+      const recommendedMarketplaces = prices.marketplace_recommendations.recommended
+        .filter((m: any) => m.connected && m.score >= 0.5)
+        .map((m: any) => m.marketplace);
+
+      // If no connected marketplaces, use top 3 recommendations
+      const marketplacesToGenerate = recommendedMarketplaces.length > 0 
+        ? recommendedMarketplaces 
+        : prices.marketplace_recommendations.recommended
+            .slice(0, 3)
+            .map((m: any) => m.marketplace);
+
+      const generatedListings = await apiClient.generateListings(
+        analysis.analysis_id,
+        analysis.product_info,
+        prices,
+        marketplacesToGenerate
+      );
+      
+      setListings(generatedListings.listings);
+      setProgress(75);
+
+      // Move to review step
+      setCurrentStep('review');
+      setProgress(80);
+
+    } catch (err: any) {
+      console.error('Error in product automation:', err);
+      setError(err.response?.data?.detail || err.message || 'An error occurred during processing');
+      setCurrentStep('upload'); // Reset to upload on error
+      setProgress(0);
     }
-  };
+  }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  const handleListingEdit = useCallback((marketplace: string, data: Partial<any>) => {
+    setListings(prev => ({
+      ...prev,
+      [marketplace]: {
+        ...prev[marketplace],
+        ...data
+      }
+    }));
+  }, []);
 
+  const handlePublish = useCallback(async (approvedListings: Record<string, any>) => {
     try {
-      const productData = {
-        ...formData,
-        price: parseFloat(formData.price),
-        quantity: parseInt(formData.quantity),
-        images,
-      };
+      setError(null);
+      setCurrentStep('publish');
+      setProgress(85);
 
-      await apiClient.createProduct(productData);
-      router.push('/dashboard/products');
-    } catch (error: any) {
-      alert(error.response?.data?.detail || 'Failed to create product');
-    } finally {
-      setLoading(false);
+      const result = await apiClient.publishListings(analysisId, approvedListings);
+      setPublishResult(result);
+      setProgress(100);
+
+      // Move to success step
+      setCurrentStep('success');
+
+    } catch (err: any) {
+      console.error('Error publishing listings:', err);
+      setError(err.response?.data?.detail || err.message || 'Failed to publish listings');
+      setCurrentStep('review'); // Go back to review on error
     }
-  };
+  }, [analysisId]);
+
+  const handleStartOver = useCallback(() => {
+    setCurrentStep('upload');
+    setProgress(0);
+    setUploadedImages([]);
+    setAnalysisId('');
+    setAnalysisData(null);
+    setPriceData(null);
+    setRecommendations(null);
+    setListings({});
+    setPublishResult(null);
+    setError(null);
+  }, []);
 
   return (
-    <div className="px-4 py-6 sm:px-0">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Add New Product</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          Fill in the product details below
-        </p>
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-6 bg-white shadow rounded-lg p-6">
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          <div className="col-span-2">
-            <label htmlFor="title" className="block text-sm font-medium text-gray-700">
-              Product Title *
-            </label>
-            <input
-              type="text"
-              name="title"
-              id="title"
-              required
-              value={formData.title}
-              onChange={handleChange}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            />
-          </div>
-
-          <div className="col-span-2">
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700">
-              Description
-            </label>
-            <textarea
-              name="description"
-              id="description"
-              rows={4}
-              value={formData.description}
-              onChange={handleChange}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            />
-          </div>
-
+    <div className="min-h-screen bg-lightgray pb-12">
+      <div className="max-w-6xl mx-auto p-4 sm:p-8 space-y-8">
+        {/* Header */}
+        <div className="flex items-center justify-between">
           <div>
-            <label htmlFor="price" className="block text-sm font-medium text-gray-700">
-              Price *
-            </label>
-            <input
-              type="number"
-              name="price"
-              id="price"
-              required
-              step="0.01"
-              min="0"
-              value={formData.price}
-              onChange={handleChange}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            />
+            <h1 className="text-3xl font-bold text-darktext mb-2">
+              Smart Product Creation
+            </h1>
+            <p className="text-darktext/60">
+              AI-powered product listing across multiple marketplaces
+            </p>
           </div>
-
-          <div>
-            <label htmlFor="quantity" className="block text-sm font-medium text-gray-700">
-              Quantity *
-            </label>
-            <input
-              type="number"
-              name="quantity"
-              id="quantity"
-              required
-              min="0"
-              value={formData.quantity}
-              onChange={handleChange}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="category" className="block text-sm font-medium text-gray-700">
-              Category
-            </label>
-            <input
-              type="text"
-              name="category"
-              id="category"
-              value={formData.category}
-              onChange={handleChange}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="brand" className="block text-sm font-medium text-gray-700">
-              Brand
-            </label>
-            <input
-              type="text"
-              name="brand"
-              id="brand"
-              value={formData.brand}
-              onChange={handleChange}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="sku" className="block text-sm font-medium text-gray-700">
-              SKU
-            </label>
-            <input
-              type="text"
-              name="sku"
-              id="sku"
-              value={formData.sku}
-              onChange={handleChange}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="condition" className="block text-sm font-medium text-gray-700">
-              Condition
-            </label>
-            <select
-              name="condition"
-              id="condition"
-              value={formData.condition}
-              onChange={handleChange}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+          
+          {currentStep !== 'success' && (
+            <Button
+              variant="ghost"
+              onClick={() => router.back()}
+              className="text-darktext/60 hover:text-darktext"
             >
-              <option value="new">New</option>
-              <option value="used">Used</option>
-              <option value="refurbished">Refurbished</option>
-            </select>
-          </div>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
+            </Button>
+          )}
+        </div>
 
-          <div className="col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Product Images
-            </label>
-            <div className="flex items-center space-x-4">
-              <label className="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                  className="sr-only"
-                  disabled={uploadingImages}
-                />
-                {uploadingImages ? 'Uploading...' : 'Upload Images'}
-              </label>
-              <span className="text-sm text-gray-500">{images.length} image(s) uploaded</span>
+        {/* Stepper */}
+        {currentStep !== 'success' && (
+          <Stepper steps={steps} currentStepId={currentStep} />
+        )}
+
+        {/* Error Display */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-red-900">Error</p>
+              <p className="text-sm text-red-800 mt-1">{error}</p>
+              <Button
+                onClick={handleStartOver}
+                variant="outline"
+                size="sm"
+                className="mt-3 border-red-300 text-red-700 hover:bg-red-50"
+              >
+                Start Over
+              </Button>
             </div>
-            {images.length > 0 && (
-              <div className="mt-4 grid grid-cols-4 gap-4">
-                {images.map((url, index) => (
-                  <div key={index} className="relative">
-                    <img src={url} alt={`Product ${index + 1}`} className="h-24 w-24 object-cover rounded" />
-                    <button
-                      type="button"
-                      onClick={() => setImages(images.filter((_, i) => i !== index))}
-                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 text-xs"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
-        </div>
+        )}
 
-        <div className="flex justify-end space-x-3">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={loading}
-            className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
-          >
-            {loading ? 'Creating...' : 'Create Product'}
-          </button>
-        </div>
-      </form>
+        {/* Step Content */}
+        {currentStep === 'upload' && (
+          <ImageUploadCard onUpload={handleImageUpload} />
+        )}
+
+        {(currentStep === 'analyzing' || currentStep === 'research' || currentStep === 'generate') && (
+          <AnalysisProgress
+            currentStep={currentStep}
+            progress={progress}
+            analysisData={analysisData}
+            priceData={priceData}
+          />
+        )}
+
+        {currentStep === 'review' && (
+          <ListingReviewCard
+            listings={listings}
+            onApprove={handlePublish}
+            onEdit={handleListingEdit}
+          />
+        )}
+
+        {currentStep === 'publish' && (
+          <AnalysisProgress
+            currentStep="generate"
+            progress={progress}
+            analysisData={analysisData}
+            priceData={priceData}
+          />
+        )}
+
+        {currentStep === 'success' && publishResult && (
+          <PublishSuccessCard
+            publishedMarketplaces={publishResult.published || []}
+            productId={publishResult.product_id}
+          />
+        )}
+      </div>
     </div>
   );
 }
-

@@ -1,7 +1,11 @@
-from fastapi import APIRouter, Depends, Request, HTTPException, status
-from sqlalchemy.orm import Session
-from app.core.database import get_db
-from app.models.webhook_event import WebhookEvent
+"""
+Webhooks API (SUPABASE VERSION)
+Receive and manage webhook events from marketplaces
+"""
+from fastapi import APIRouter, Request, HTTPException, status
+from app.core.supabase import supabase_admin
+from datetime import datetime
+from typing import Optional
 import json
 
 router = APIRouter()
@@ -10,8 +14,7 @@ router = APIRouter()
 @router.post("/{marketplace_name}")
 async def receive_webhook(
     marketplace_name: str,
-    request: Request,
-    db: Session = Depends(get_db)
+    request: Request
 ):
     """Receive webhook from marketplace"""
     try:
@@ -20,19 +23,23 @@ async def receive_webhook(
         
         # TODO: Verify webhook signature/authentication per marketplace
         
-        # Store webhook event
-        webhook_event = WebhookEvent(
-            marketplace_name=marketplace_name,
-            event_type=payload.get("type", "unknown"),
-            payload=json.dumps(payload),
-            processed=False
-        )
-        db.add(webhook_event)
-        db.commit()
+        # Store webhook event in Supabase
+        webhook_data = {
+            "marketplace_name": marketplace_name,
+            "event_type": payload.get("type", "unknown"),
+            "payload": json.dumps(payload),
+            "processed": False,
+            "created_at": datetime.now().isoformat()
+        }
         
-        # TODO: Trigger async processing task
+        response = supabase_admin.table("webhook_events").insert(webhook_data).execute()
         
-        return {"status": "received", "event_id": webhook_event.id}
+        if not response.data:
+            raise Exception("Failed to store webhook event")
+        
+        # TODO: Trigger async processing task (Celery)
+        
+        return {"status": "received", "event_id": response.data[0]["id"]}
         
     except Exception as e:
         raise HTTPException(
@@ -42,36 +49,36 @@ async def receive_webhook(
 
 
 @router.get("/events")
-def get_webhook_events(
-    marketplace_name: str = None,
-    processed: bool = None,
+async def get_webhook_events(
+    marketplace_name: Optional[str] = None,
+    processed: Optional[bool] = None,
     skip: int = 0,
-    limit: int = 50,
-    db: Session = Depends(get_db)
+    limit: int = 50
 ):
     """Get webhook events (for debugging/monitoring)"""
-    query = db.query(WebhookEvent)
+    query = supabase_admin.table("webhook_events").select("*")
     
     if marketplace_name:
-        query = query.filter(WebhookEvent.marketplace_name == marketplace_name)
+        query = query.eq("marketplace_name", marketplace_name)
     
     if processed is not None:
-        query = query.filter(WebhookEvent.processed == processed)
+        query = query.eq("processed", processed)
     
-    events = query.order_by(WebhookEvent.created_at.desc()).offset(skip).limit(limit).all()
+    query = query.order("created_at", desc=True).range(skip, skip + limit - 1)
+    
+    response = query.execute()
     
     return {
         "events": [
             {
-                "id": e.id,
-                "marketplace_name": e.marketplace_name,
-                "event_type": e.event_type,
-                "processed": e.processed,
-                "created_at": e.created_at,
-                "processed_at": e.processed_at
+                "id": e["id"],
+                "marketplace_name": e["marketplace_name"],
+                "event_type": e["event_type"],
+                "processed": e["processed"],
+                "created_at": e["created_at"],
+                "processed_at": e.get("processed_at")
             }
-            for e in events
+            for e in response.data
         ],
-        "total": len(events)
+        "total": len(response.data)
     }
-

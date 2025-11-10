@@ -59,6 +59,8 @@ class EtsyConnector(BaseMarketplaceConnector):
             "refresh_token": token_data.get("refresh_token"),
             "expires_at": token_data.get("expires_in"),
             "token_type": token_data.get("token_type")
+
+            
         }
     
     def refresh_token(self, refresh_token: str) -> Dict[str, str]:
@@ -229,4 +231,59 @@ class EtsyConnector(BaseMarketplaceConnector):
                 self._make_request("POST", url, headers=headers, json_data=data)
             except Exception as e:
                 print(f"Failed to upload image {image_url}: {e}")
+    
+    def get_inventory(self, access_token: str) -> List[Dict]:
+        """Get Etsy shop inventory (same as listings with inventory data)"""
+        listings = self.get_listings(access_token, state="active")
+        
+        inventory = []
+        for listing in listings:
+            inventory.append({
+                "listing_id": listing.get("listing_id"),
+                "title": listing.get("title"),
+                "sku": listing.get("sku"),
+                "quantity": listing.get("quantity"),
+                "price": listing.get("price"),
+                "state": listing.get("state")
+            })
+        
+        return inventory
+    
+    def update_inventory(self, listing_id: str, quantity: int, access_token: str) -> Dict[str, Any]:
+        """Update Etsy listing inventory"""
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+            "x-api-key": self.config.get("client_id")
+        }
+        
+        shop_id = self.config.get("shop_id")
+        url = f"{self.BASE_URL}/application/shops/{shop_id}/listings/{listing_id}"
+        
+        update_data = {"quantity": quantity}
+        
+        response = self._make_request("PUT", url, headers=headers, json_data=update_data)
+        return response.json()
+    
+    def get_orders(self, access_token: str, **filters) -> List[Dict]:
+        """Get Etsy shop receipts (orders)"""
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "x-api-key": self.config.get("client_id")
+        }
+        
+        shop_id = self.config.get("shop_id")
+        url = f"{self.BASE_URL}/application/shops/{shop_id}/receipts"
+        
+        params = {
+            "limit": filters.get("limit", 25),
+            "was_paid": filters.get("was_paid", True),
+            "was_shipped": filters.get("was_shipped")
+        }
+        
+        # Remove None values
+        params = {k: v for k, v in params.items() if v is not None}
+        
+        response = self._make_request("GET", url, headers=headers, params=params)
+        return response.json().get("results", [])
 

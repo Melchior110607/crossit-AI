@@ -1,11 +1,11 @@
 from typing import Dict
 from app.integrations.base_connector import BaseMarketplaceConnector
-from app.integrations.amazon_connector import AmazonConnector
-from app.integrations.ebay_connector import EbayConnector
-from app.integrations.etsy_connector import EtsyConnector
-from app.integrations.bol_connector import BolConnector
-from app.integrations.allegro_connector import AllegroConnector
-from app.integrations.shopify_connector import ShopifyConnector
+from backend.app.integrations.B2C.amazon_connector import AmazonConnector
+from backend.app.integrations.B2C.ebay_connector import EbayConnector
+from backend.app.integrations.B2C.etsy_connector import EtsyConnector
+from backend.app.integrations.B2B.bol_connector import BolConnector
+from backend.app.integrations.B2B.allegro_connector import AllegroConnector
+from backend.app.integrations.B2C.shopify_connector import ShopifyConnector
 from app.integrations.marketplace_templates import (
     KauflandConnector,
     OnBuyConnector,
